@@ -1,9 +1,10 @@
 # common/crypto.py
 
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import hashes, serialization
 import base64
 import json
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.fernet import Fernet
 
 def generate_keys():
     private_key = rsa.generate_private_key(
@@ -47,30 +48,55 @@ def load_public_key(pem_data: str):
     return serialization.load_pem_public_key(pem_data.encode())
 
 def encrypt_layer(public_key, data: dict) -> str:
-#single layer encryption using the recipient's public key.
-    json_data = json.dumps(data).encode()
-    encrypted = public_key.encrypt(
-        json_data,
+    # 1. Generate a one-time symmetric AES key
+    sym_key = Fernet.generate_key()
+    f = Fernet(sym_key)
+    
+    # 2. Encrypt the actual payload with the AES key
+    payload_json = json.dumps(data).encode()
+    encrypted_payload = f.encrypt(payload_json)
+    
+    # 3. Encrypt the AES key with the RSA Public Key
+    encrypted_sym_key = public_key.encrypt(
+        sym_key,
         padding.OAEP(
             mgf=padding.MGF1(algorithm=hashes.SHA256()),
             algorithm=hashes.SHA256(),
             label=None
         )
     )
-    return base64.b64encode(encrypted).decode()
+    
+    # 4. Bundle them together in a JSON package
+    package = {
+        "k": base64.b64encode(encrypted_sym_key).decode(),
+        "p": base64.b64encode(encrypted_payload).decode()
+    }
+    return base64.b64encode(json.dumps(package).encode()).decode()
 
 def decrypt_layer(private_key, encrypted_base64: str) -> dict:
-#Decrypts a single layer using node's private key.
-    encrypted_data = base64.b64decode(encrypted_base64)
-    decrypted = private_key.decrypt(
-        encrypted_data,
+    # 1. Decode the outer package
+    package = json.loads(base64.b64decode(encrypted_base64).decode())
+    
+    # 2. Decrypt the AES key using the RSA Private Key
+    encrypted_key_bytes = base64.b64decode(package['k'])
+    sym_key = private_key.decrypt(
+        encrypted_key_bytes,
         padding.OAEP(
             mgf=padding.MGF1(algorithm=hashes.SHA256()),
             algorithm=hashes.SHA256(),
             label=None
         )
     )
-    return json.loads(decrypted.decode())
+    
+    # 3. Decrypt the actual payload using the AES key
+    f = Fernet(sym_key)
+    encrypted_payload_bytes = base64.b64decode(package['p'])
+    
+    # Fernet.decrypt expects bytes, returns bytes
+    decrypted_bytes = f.decrypt(encrypted_payload_bytes)
+    
+    # 4. Convert bytes back to JSON dict
+    return json.loads(decrypted_bytes.decode('utf-8'))
 
 def create_onion(final_message: str, hops: list) -> str:
     """
@@ -89,3 +115,16 @@ def create_onion(final_message: str, hops: list) -> str:
         current_layer = encrypt_layer(pub_key, data_to_encrypt)
         
     return current_layer
+
+def load_private_key(node_name):
+#Loads a private key from the keys/ directory
+    with open(f"keys/{node_name}_priv.pem", "rb") as f:
+        return serialization.load_pem_private_key(
+            f.read(),
+            password=None
+        )
+
+def load_public_key_from_file(node_name):
+#Loads a public key from the keys/ directory
+    with open(f"keys/{node_name}_pub.pem", "rb") as f:
+        return serialization.load_pem_public_key(f.read())

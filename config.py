@@ -6,3 +6,9 @@ ME_URLS = [
 
 MONGO_URI = "mongodb+srv://blackfalconx69_db_user:t2k6FxnaHMkFYXM9@cluster0.ms0ky1p.mongodb.net/?appName=Cluster0"
 DB_NAME = "anon_network"
+
+ROUTING_TABLE = {
+    "X": "http://127.0.0.1:6002/forward",
+    "Y": "http://127.0.0.1:6003/forward",
+    "RECEIVER": "http://127.0.0.1:7000/receive"
+}
