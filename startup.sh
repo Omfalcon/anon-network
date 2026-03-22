@@ -1,33 +1,44 @@
 #!/bin/bash
 
-#Kill any existing python processes on our ports
-fuser -k 5000/tcp 5001/tcp 5002/tcp 6001/tcp 6002/tcp 6003/tcp 7000/tcp 2>/dev/null
+# 1. Cleanup: Kill any existing python processes on the network ports
+echo "Cleaning up existing network processes..."
+fuser -k 5000/tcp 5001/tcp 5002/tcp 6001/tcp 6002/tcp 6003/tcp 6004/tcp 7000/tcp 2>/dev/null
 
-echo "Starting Anon-Network Phase 3..."
+# 2. Environment Setup: Set root directory for module imports
+export PYTHONPATH=$PYTHONPATH:$(pwd)
 
-#root directory for imports
-export PYTHONPATH=$PYTHONPATH:.
+# 3. Provisioning: Generate the Keyring
+echo "Generating fresh RSA Keyring for Phase 3..."
+python generate_keyring.py
 
-# 1. Start the Trustee (Port 5000)
+if [ $? -ne 0 ]; then
+    echo "Error: Keyring generation failed. Aborting startup."
+    exit 1
+fi
+
+echo "Starting Anon-Network Phase 3 Nodes..."
+
+# 4. Start the Trustee (Identity Mapping)
 PORT=5000 python trustee/app.py & 
 sleep 1
 
-# 2. Start Management Entities (Port 5001, 5002)
+# 5. Start Management Entities (Distributed Signing)
 PORT=5001 NODE_NAME=ME1 python me/app.py &
 PORT=5002 NODE_NAME=ME2 python me/app.py &
 sleep 1
 
-# 3. Start Onion Routers (S, X, Y)
-# These names must match your .pem filenames in /keys
+# 6. Start Onion Routers (S, X, Y)
 PORT=6001 NODE_NAME=routerS python router/app.py &
 PORT=6002 NODE_NAME=routerX python router/app.py &
 PORT=6003 NODE_NAME=routerY python router/app.py &
 sleep 1
 
-# 4. Start the Receiver
-PORT=6004 NODE_NAME=receiverB python receiver/app.py &
+# 7. Start the Receiver
+PORT=7000 NODE_NAME=receiverB python receiver/app.py &
 
-echo "All nodes are live. Run 'python sender/sender.py' in a new terminal."
+echo "----------------------------------------------------------------"
+echo "All nodes are live with fresh keys. Run 'python -m sender.sender'"
+echo "----------------------------------------------------------------"
 
-#Keeps the script running so the background processes don't die
+# Keep script alive for background processes
 wait
