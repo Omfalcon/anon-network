@@ -176,6 +176,29 @@ Ensure:
 
 # 🚀 How To Run the System
 
+## Step1 
+
+```powershell
+./startup.sh
+```
+
+## Step2
+
+* In another powershell terminal run
+
+```powershell
+python -m sender.sender
+```
+
+* Go back to the terminal where startup.sh is running
+* Expected output:
+* Peeling Layers
+* Showing ACI code
+* Showing message recieved
+* Showing recieved fragments
+
+## Alternatively
+
 Open multiple PowerShell terminals.
 
 ---
