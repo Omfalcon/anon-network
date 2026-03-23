@@ -5,7 +5,7 @@ echo "Cleaning up existing network processes..."
 fuser -k 5000/tcp 5001/tcp 5002/tcp 6001/tcp 6002/tcp 6003/tcp 6004/tcp 7000/tcp 2>/dev/null
 
 # 2. Environment Setup: Set root directory for module imports
-export PYTHONPATH=$PYTHONPATH:$(pwd)
+export PYTHONPATH=.
 
 # 3. Provisioning: Generate the Keyring
 echo "Generating fresh RSA Keyring for Phase 3..."
