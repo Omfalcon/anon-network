@@ -1,68 +1,41 @@
-# router/app.py
-
 from flask import Flask, request, jsonify
 import requests
 import os
-import uuid
+from common.crypto import decrypt_layer, load_private_key
 
 app = Flask(__name__)
+NODE_NAME = os.environ.get("NODE_NAME", "routerS") # Set by startup.sh
+PORT = os.environ.get("PORT", 6001)
 
-NEXT_HOP = os.environ.get("NEXT_HOP")
-
-# In-memory routing table
-routing_table = {}
-
-
-@app.route("/init", methods=["POST"])
-def init_connection():
-    data = request.json
-    aci = data.get("aci")
-
-    if not aci:
-        aci = "ACI-" + str(uuid.uuid4())[:8]
-
-    routing_table[aci] = {
-        "next_hop": NEXT_HOP
-    }
-
-    print(f"[Router {os.environ.get('PORT')}] Registered ACI {aci}")
-
-    if NEXT_HOP and "600" in NEXT_HOP:
-        requests.post(
-            f"{NEXT_HOP}/init",
-            json={"aci": aci}
-        )
-
-    return jsonify({"aci": aci})
+# Load unique identity
+private_key = load_private_key(NODE_NAME)
 
 @app.route("/forward", methods=["POST"])
 def forward():
     data = request.json
-    aci = data.get("aci")
-    message = data.get("message")
+    onion_blob = data.get("onion")
 
-    print(f"[Router {os.environ.get('PORT')}] Received message for {aci}: {message}")
+    try:
+        # Peel layer: returns {'next_hop': ..., 'message': ...}
+        peeled_data = decrypt_layer(private_key, onion_blob)
+        next_hop = peeled_data.get("next_hop")
+        inner_onion = peeled_data.get("message")
+        
+        print(f"[{NODE_NAME}] Layer peeled. Forwarding to: {next_hop}")
 
-    if aci not in routing_table:
-        print("Unknown ACI. Rejecting.")
-        return jsonify({"error": "Unknown ACI"}), 400
+        if next_hop:
+            requests.post(next_hop, json={"onion": inner_onion})
+            return jsonify({"status": "Forwarded"}), 200
+        return jsonify({"error": "No next hop"}), 400
 
-    next_hop = routing_table[aci]["next_hop"]
+    except Exception as e:
+        print(f"[{NODE_NAME}] Decryption failed: {e}")
+        return jsonify({"error": "Decryption failed"}), 403
 
-    if next_hop:
-        print(f"[Router {os.environ.get('PORT')}] Forwarding {aci} to {next_hop}")
-
-        # Determine endpoint
-        endpoint = "/forward" if "600" in next_hop else "/receive"
-
-        requests.post(
-            f"{next_hop}{endpoint}",
-            json={"aci": aci, "message": message}
-        )
-
-    return jsonify({"status": "Forwarded"})
-
+@app.route("/init", methods=["POST"])
+def init_circuit():
+    import uuid
+    return jsonify({"aci": f"ACI-{uuid.uuid4().hex[:8]}"})
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 6001))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=int(PORT))

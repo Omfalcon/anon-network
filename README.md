@@ -89,13 +89,22 @@ Now the system behaves as a circuit-based anonymous network.
 
 ---
 
+## 🔹 Phase 3 – Circuit Establishment (ACI)
+
+* Symmetric Layer: The actual message and identity fragments are encrypted using AES-256 (Fernet).
+
+* Asymmetric Layer: Only the 32-byte AES key is encrypted using RSA-OAEP with the next hop's public key.
+
+* Encapsulation: This process repeats at each layer, ensuring the payload can be of arbitrary size while maintaining cryptographic security at every hop.
+
+---
 # 🛠 Tech Stack
 
 * Python 3.x
 * Flask (REST services)
 * MongoDB (Cloud Atlas)
 * Requests (inter-service communication)
-* Cryptography (RSA signing)
+* Cryptography (RSA-AES hybrid implementation)
 
 ---
 
@@ -105,6 +114,9 @@ Now the system behaves as a circuit-based anonymous network.
 anon-network/
 │
 ├── config.py
+│
+├── generate_keyring.py
+│
 ├── common/
 │   ├── crypto.py
 │   └── shamir.py
@@ -164,9 +176,39 @@ Ensure:
 
 # 🚀 How To Run the System
 
+## Step1 
+
+```powershell
+./startup.sh
+```
+
+## Step2
+
+* In another powershell terminal run
+
+```powershell
+python -m sender.sender
+```
+
+* Go back to the terminal where startup.sh is running
+* Expected output:
+* Peeling Layers
+* Showing ACI code
+* Showing message recieved
+* Showing recieved fragments
+
+## Alternatively
+
 Open multiple PowerShell terminals.
 
 ---
+
+## 🟢 Generating Keyring
+
+```powershell
+$env:PYTHONPATH = "."
+python generate_keyring.py
+```
 
 ## 🟢 Start Receiver
 

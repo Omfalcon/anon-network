@@ -218,3 +218,11 @@ __pycache__/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local Keys
+keys/
+*.pem
+private_key.bin
+
+# Python Environment
+__pycache__/
