@@ -6,7 +6,7 @@ ME_URLS = [
     "http://127.0.0.1:5002"
 ]
 
-MONGO_URI = "mongodb+srv://blackfalconx69_db_user:t2k6FxnaHMkFYXM9@cluster0.ms0ky1p.mongodb.net/?appName=Cluster0"
+MONGO_URI = "mongodb://localhost:27017/"
 DB_NAME = "anon_network"
 
 # Phase 5: shared secret for authorized trace (Bearer token). Override in env for deployment.
