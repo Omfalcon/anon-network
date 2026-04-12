@@ -189,36 +189,41 @@ Now the system behaves as a circuit-based anonymous network.
 ```
 anon-network/
 │
-├── config.py
-│
-├── generate_keyring.py
+├── benchmark/
+│   ├── benchmark.py
+│   └── generate_plots.py
 │
 ├── common/
+│   ├── __init__.py
 │   ├── crypto.py
 │   ├── link_session.py
 │   └── shamir.py
 │
-├── startup.sh
-├── startup.ps1
-│
-├── trustee/
-│   └── app.py
-│
 ├── me/
-│   └── app.py
-│
-├── router/
 │   └── app.py
 │
 ├── receiver/
 │   └── app.py
 │
+├── router/
+│   └── app.py
+│
 ├── sender/
 │   └── sender.py
 │
+├── trustee/
+│   └── app.py
+│
+├── .gitignore
+├── config.py
+├── generate_keyring.py
+├── requirements.txt
+├── RESEARCH.md
+├── verify_link_layer_demo.py
+├── startup.sh
+├── startup.ps1
 ├── trace_request.py
 ├── clean_trace_mongo.py
-│
 └── README.md
 ```
 
