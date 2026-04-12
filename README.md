@@ -419,12 +419,26 @@ Expect JSON with **`reconstructed_ip`**, **`trustee_ground_truth_ip`**, and **`g
 
 ---
 
-# 🚧 Remaining Phases
+# 🎓 Research & Performance Evaluation
 
-## 🤖 Phase 6 – Neural Network Integration (Optional)
+This repository includes a dedicated suite for academic benchmarking and security verification, making it suitable for research papers (e.g., IEEE/ACM style).
 
-* Malicious traffic detection
-* Abuse-triggered trace
+### 1. Performance Benchmarking
+Measure the latency overhead of each cryptographic phase (RSA, AES, ECDH) and system stage.
+```powershell
+python benchmark/benchmark.py
+python benchmark/generate_plots.py
+```
+**Generated Plots:**
+- `benchmark/latency_breakdown.png`: Comparison of Registration, Setup, and Trace times.
+- `benchmark/crypto_performance.png`: Raw overhead of individual cryptographic primitives.
+
+### 2. Formal Security Proofs
+Verify the "Pairwise Link Security" property (Phase 4) using a standalone proof script.
+```powershell
+python verify_link_layer_demo.py
+```
+This script proves that without the correct ephemeral key or ACI salt, intermediate neighbors cannot recover the encrypted onion layers.
 
 ---
 
@@ -432,23 +446,19 @@ Expect JSON with **`reconstructed_ip`**, **`trustee_ground_truth_ip`**, and **`g
 
 This project demonstrates:
 
-* Distributed systems design
-* Microservice architecture
-* Cryptographic identity validation
-* Circuit-based anonymous communication
-* Reverse traceable anonymity
-* Layered cryptography (hybrid onion + ECDH-derived link keys)
-* Policy-gated accountability (Phase 5 trace)
+* **Distributed Accountability**: Identity validation via Trustee and Management Entities (MEs).
+* **Cryptographic Layering**: Hybrid onion (RSA-OAEP + Fernet) combined with per-link session encryption (X25519 + HKDF + AES-GCM).
+* **Controlled Traceability**: Reconstructing identity from distributed fragments only upon authorization (Phase 5).
+* **Microservice Security**: Independent trust boundaries between identity, routing, and reception layers.
 
 ---
 
 # 🏁 Current Status
 
-✔ Phase 1 Completed — Identity & validation (Trustee, ME signatures, MongoDB)
-✔ Phase 2A Completed — Multi-hop REST routing
-✔ Phase 2B Completed — ACI + `/init` + routing table
-✔ Phase 3 Completed — Hybrid onion (RSA-OAEP + AES-256 Fernet per hop)
-✔ Phase 4 Completed — X25519 ECDH at `/init`, HKDF (ACI-bound), AES-GCM link forwarding
-✔ Phase 5 Completed — Authorized trace: ME `/trace/fragments`, Trustee `/trace/reconstruct`, RSA signature verification, IP reconstruction
-
----
+✔ **Phase 1 Completed** — Identity & validation (Trustee, ME signatures, MongoDB)
+✔ **Phase 2A Completed** — Multi-hop REST routing
+✔ **Phase 2B Completed** — ACI + `/init` + routing table
+✔ **Phase 3 Completed** — Hybrid onion (RSA-OAEP + AES-256 Fernet per hop)
+✔ **Phase 4 Completed** — X25519 ECDH at `/init`, HKDF (ACI-bound), AES-GCM link forwarding
+✔ **Phase 5 Completed** — Authorized trace: ME `/trace/fragments`, Trustee `/trace/reconstruct`, RSA signature verification, IP reconstruction
+✔ **Research Suite Completed** — Benchmarking scripts, security proofs, and automated visualization
