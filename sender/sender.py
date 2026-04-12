@@ -21,7 +21,10 @@ def main():
     signed_fragments = []
     for i, fragment in enumerate(fragments):
         me_url = ME_URLS[i % len(ME_URLS)]
-        sign_response = requests.post(f"{me_url}/sign", json={"fragment": fragment, "pseudonym": pseudonym})
+        sign_response = requests.post(
+            f"{me_url}/sign",
+            json={"fragment": fragment, "pseudonym": pseudonym, "position": i},
+        )
         sign_response.raise_for_status()
         signed_fragments.append(sign_response.json())
 

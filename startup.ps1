@@ -30,4 +30,6 @@ Start-Node 7000 "receiverB" "receiver\app.py"
 Write-Host "----------------------------------------------------------------"
 Write-Host "Wait ~3s for ports to listen, then in THIS window run:"
 Write-Host '  $env:PYTHONPATH="."; python -m sender.sender'
+Write-Host "Phase 5 trace (use PA-xxxx from sender log):"
+Write-Host '  $env:PYTHONPATH="."; python trace_request.py PA-xxxxxxxx'
 Write-Host "----------------------------------------------------------------"

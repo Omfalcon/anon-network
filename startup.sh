@@ -37,7 +37,9 @@ sleep 1
 PORT=7000 NODE_NAME=receiverB python receiver/app.py &
 
 echo "----------------------------------------------------------------"
-echo "All nodes are live with fresh keys. Run 'python -m sender.sender'"
+echo "All nodes are live with fresh keys."
+echo "  Run: PYTHONPATH=. python -m sender.sender"
+echo "  Phase 5 trace: PYTHONPATH=. python trace_request.py <PA-xxxx>"
 echo "----------------------------------------------------------------"
 
 # Keep script alive for background processes
