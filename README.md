@@ -1,6 +1,6 @@
 # 🧅 Anon-Network
 
-### Reverse Onion Routing – Phase 1 & Phase 2 Implementation
+### Reverse Onion Routing – Phases 1–4 (Identity → Routing → Hybrid Onion → Session Keys)
 
 ---
 
@@ -20,7 +20,9 @@ This implementation currently covers:
 
 * Identity management layer
 * Multi-hop routing
-* Circuit establishment using ACI
+* Circuit establishment using ACI (Anonymous Connection Identifier)
+* Hybrid per-hop onion encryption (RSA-OAEP + AES-256 via Fernet)
+* Per-link session keys (X25519 ECDH + HKDF + AES-GCM) between routers for a given circuit
 * Distributed state propagation
 
 ---
@@ -46,12 +48,17 @@ Routing Layer
 
 ## 🔹 Phase 1 – Identity & Validation Layer
 
-* Sender registers with Trustee
-* IP address is fragmented
-* Each fragment is signed by distributed ME servers
-* MongoDB stores identity and fragment mappings
-* Multiple ME instances supported
-* REST-based microservice communication
+**What happens**
+
+* Sender registers with the **Trustee** over REST (`POST /register`) and supplies a real IP.
+* The Trustee assigns a **pseudonym** (e.g. `PA-xxxxxxxx`) and splits the IP into **fragments** (implementation: dotted octets as separate strings via `split_ip` in `common/shamir.py`).
+* Each fragment is sent to a **Management Entity (ME)** (`POST /sign`). MEs sign fragments with **RSA** using **PKCS#1 v1.5** padding and **SHA-256** (`common/crypto.py` → `sign_data`).
+* **MongoDB** stores mappings: pseudonym, real IP, fragments, and ME-side fragment records.
+
+**Encryption / crypto used**
+
+* **Digital signatures:** RSA + PKCS1v15 + SHA-256 on each fragment string (per-ME keypair generated at ME startup).
+* No transport encryption in the demo; trust boundaries are logical (separate MEs, no single ME sees the full IP as one blob in one place—fragments are distributed).
 
 ### Achievements
 
@@ -64,10 +71,15 @@ Routing Layer
 
 ## 🔹 Phase 2A – Multi-Hop Routing
 
-* Built independent router services
-* Configured routers using environment variables
-* Implemented REST-based forwarding
-* Simulated multi-terminal distributed network
+**What happens**
+
+* Independent **router** Flask apps (`router/app.py`) run as **Router S** (entry), **Router X**, **Router Y**, identified by `NODE_NAME` and `PORT`.
+* Forwarding is **REST-based** (`POST /forward`): each node receives a payload and passes it toward the **next hop URL** defined by the protocol (in later phases that URL lives inside decrypted onion data).
+* **Receiver** exposes `POST /receive` as the path exit.
+
+**Encryption**
+
+* Phase 2A establishes **topology and HTTP flow** only; **onion encryption** is Phase 3 and **link session encryption** is Phase 4.
 
 Message flow:
 
@@ -79,23 +91,65 @@ Sender → Router S → Router X → Router Y → Receiver
 
 ## 🔹 Phase 2B – Circuit Establishment (ACI)
 
-* Added Anonymous Connection Identifier (ACI)
-* Implemented `/init` endpoint for circuit setup
-* Distributed ACI propagation across routers
-* Per-router routing table implementation
-* Stateful message forwarding
+**What happens**
+
+* **ACI** (Anonymous Connection Identifier), e.g. `ACI-xxxxxxxx`, labels a logical **circuit**.
+* **`POST /init`** on the **entry router (Router S)** creates a new ACI. The sender includes this ACI inside the **inner payload** (JSON) so the receiver can display which circuit delivered the message.
+* **`config.py`** defines **`ROUTING_TABLE`**: static next-hop URLs for `X`, `Y`, and `RECEIVER` used when building the onion (Phase 3).
+* Forwarding remains **stateful** in the sense that each hop follows the embedded `next_hop` after decryption.
+
+**Encryption**
+
+* ACI itself is carried as **plaintext inside the innermost JSON** after all onion layers are removed at the receiver (not encrypted separately from the message in that inner blob).
+
+* **Phase 4 extension:** the same **`POST /init`** on Router S additionally drives **ECDH session setup** along the path (see Phase 4). The sender still obtains **one ACI** per run and passes **`aci` with `forward`** for link keys.
 
 Now the system behaves as a circuit-based anonymous network.
 
 ---
 
-## 🔹 Phase 3 – Circuit Establishment (ACI)
+## 🔹 Phase 3 – Hybrid Onion (Per-Hop “Nested” Encryption)
 
-* Symmetric Layer: The actual message and identity fragments are encrypted using AES-256 (Fernet).
+**What happens**
 
-* Asymmetric Layer: Only the 32-byte AES key is encrypted using RSA-OAEP with the next hop's public key.
+* The sender builds an **onion** from the **inside out**: innermost payload is JSON (ACI, user message, signed fragments), then each hop adds an outer wrapper for **Router Y → X → S** order in code (`create_onion` in `common/crypto.py`).
+* Each hop’s decrypted structure is JSON: **`{ "message": <inner blob string>, "next_hop": "<URL>" }`**. The entry receives the **outermost** blob; each router peels **one** layer and forwards the inner string to `next_hop`.
 
-* Encapsulation: This process repeats at each layer, ensuring the payload can be of arbitrary size while maintaining cryptographic security at every hop.
+**Encryption techniques**
+
+| Piece | Algorithm | Role |
+|--------|-----------|------|
+| Bulk of each layer | **AES-256** in **Fernet** | Encrypts the JSON (`message` + `next_hop`) for that hop. |
+| Per-layer symmetric key | **RSA-OAEP** (SHA-256, MGF1-SHA256) | Only the 32-byte Fernet key is encrypted to the **next hop’s RSA public key** (2048-bit RSA in `generate_keys`). |
+| Package on the wire | Base64-wrapped JSON | Outer envelope contains `k` (RSA-encrypted key) and `p` (Fernet ciphertext). |
+
+* **Encapsulation** repeats for every hop so the payload can be arbitrarily large (bounded by practical RSA/Fernet limits), with **end-to-end onion semantics**: each intermediate only peels **its** layer.
+
+---
+
+## 🔹 Phase 4 – Session Keys + Secure Forwarding (✅ Completed)
+
+**What happens**
+
+* **ECDH at `/init` (entry router only):** `POST /init` on **Router S** generates an **ACI** and runs a **pairwise X25519 handshake** along the fixed path so each link shares a **session key** for that circuit:
+  * **S ↔ X** — `POST /session/handshake` on X (S initiates, X responds).
+  * **X ↔ Y** — `POST /session/downstream` on X triggers X to initiate handshake with Y.
+  * **Y ↔ receiver** — `POST /session/downstream` on Y triggers Y to initiate handshake with **receiverB** (`receiver/app.py` exposes `/session/handshake`).
+* **HKDF key derivation:** From each ECDH shared secret, both sides derive a **32-byte link key** with **HKDF-SHA256**, **salt = ACI string**, **info = `anon-link:<sorted node pair>`** (`common/link_session.py` → `derive_link_key`). Keys are **bound to the circuit** without sending ACI on every frame.
+* **Link-layer encryption:** After a router **peels its RSA+Fernet onion layer** (Phase 3), the **inner onion string** is encrypted with **AES-256-GCM** (`link_encrypt` / `link_decrypt`) using the **outbound** link key before HTTP forward. The **next** hop **decrypts the link layer first**, then peels its RSA layer.
+* **Entry exception:** The sender still posts the **raw outer onion** to Router S (no link decrypt on ingress). **All hops after S** expect **`aci` + link-wrapped `onion`** on `POST /forward` or `POST /receive`.
+* **Orchestration URLs** for handshakes live in **`config.py`** → **`NODE_BASES`**.
+
+**Encryption techniques**
+
+| Piece | Algorithm | Role |
+|--------|-----------|------|
+| Ephemeral ECDH | **X25519** | Per circuit setup between neighbors; forward secrecy for the session key material. |
+| Key derivation | **HKDF** (SHA-256), salt = **ACI** | Produces per-link **AES-256** keys tied to the circuit id. |
+| Link ciphertext | **AES-256-GCM** (12-byte random nonce, prepended) | Confidentiality + integrity for the forwarded onion blob **between** routers. |
+| End-to-end hop privacy (inner) | Phase 3 stack unchanged | RSA-OAEP + Fernet still define the **onion**; Phase 4 adds a **second** layer on the wire between routers. |
+
+**Summary:** Phase 3 protects **who can read which onion layer**; Phase 4 adds **pairwise link encryption** keyed by **ECDH + HKDF** so intermediate HTTP links carry **GCM-protected** payloads for a given **ACI**.
 
 ---
 # 🛠 Tech Stack
@@ -104,7 +158,7 @@ Now the system behaves as a circuit-based anonymous network.
 * Flask (REST services)
 * MongoDB (Cloud Atlas)
 * Requests (inter-service communication)
-* Cryptography (RSA-AES hybrid implementation)
+* Cryptography: RSA-OAEP, Fernet (AES-256), **X25519**, **HKDF-SHA256**, **AES-GCM** (`common/crypto.py`, `common/link_session.py`)
 
 ---
 
@@ -119,7 +173,11 @@ anon-network/
 │
 ├── common/
 │   ├── crypto.py
+│   ├── link_session.py
 │   └── shamir.py
+│
+├── startup.sh
+├── startup.ps1
 │
 ├── trustee/
 │   └── app.py
@@ -176,30 +234,39 @@ Ensure:
 
 # 🚀 How To Run the System
 
-## Step1 
+Set **`PYTHONPATH`** to the project root so `common` and `config` resolve (`export PYTHONPATH=.` on Bash/WSL, `$env:PYTHONPATH="."` on PowerShell).
 
-```powershell
+## Step 1 — Start all nodes
+
+**Git Bash / WSL / Linux**
+
+```bash
+export PYTHONPATH=.
 ./startup.sh
 ```
 
-## Step2
-
-* In another powershell terminal run
+**Windows PowerShell (opens one `cmd` window per service for logs)**
 
 ```powershell
+$env:PYTHONPATH="."
+.\startup.ps1
+```
+
+## Step 2 — Run the sender
+
+In a **second** terminal (same folder):
+
+```powershell
+$env:PYTHONPATH="."
 python -m sender.sender
 ```
 
-* Go back to the terminal where startup.sh is running
-* Expected output:
-* Peeling Layers
-* Showing ACI code
-* Showing message recieved
-* Showing recieved fragments
+* **Sender terminal:** Phase 1–2 banner, then Phase 3–4 banner, **ACI**, “Baking hybrid onion…”, **Forward HTTP 200**.
+* **Router / receiver windows:** Phase 4 **ECDH** lines during `/init`, then **link AES-GCM** + **RSA peel** logs on forward; **Receiver** prints **SUCCESS** with message and fragment count.
 
 ## Alternatively
 
-Open multiple PowerShell terminals.
+Start each service manually in separate terminals (see sections below) with the correct `PORT` and `NODE_NAME`.
 
 ---
 
@@ -279,6 +346,7 @@ python -m me.app
 ## 🟢 Run Sender
 
 ```powershell
+$env:PYTHONPATH="."
 python -m sender.sender
 ```
 
@@ -286,41 +354,35 @@ python -m sender.sender
 
 # 🎬 Expected Output
 
-* Trustee registers sender
-* ME servers sign fragments
-* Router S initializes ACI
-* ACI propagates to all routers
-* Message flows across routers
-* Receiver prints final message
+* Trustee registers sender (pseudonym + IP mapping in MongoDB)
+* ME servers sign each IP fragment (RSA signatures)
+* **Phase 4:** Router S **`/init`** completes **ECDH** handshakes S↔X, X↔Y, Y↔receiver; session keys stored per **ACI**
+* Sender builds **hybrid onion** (Phase 3) and **`POST /forward`** with **`onion` + `aci`**
+* Each router: **link decrypt** (except entry) → **RSA+Fernet peel** → **link encrypt** to next hop
+* Receiver: **link decrypt** → **final peel** → prints **SUCCESS**, **ACI**, **message**, **fragment count**
 
-Example:
+Example (receiver):
 
 ```
-[Receiver] ACI ACI-xxxx → Message: Hello Anonymous Circuit
+[Receiver] SUCCESS: Onion Decapsulated
+[*] ACI: ACI-xxxxxxxx
+[*] Msg: Hello from Circuit
+[*] Fragments: 4
 ```
 
 ---
 
 # 🧠 What The System Currently Simulates
 
-* Circuit-based anonymous routing
-* Distributed identity validation
-* Stateful connection management
+* Circuit-based anonymous routing (fixed path in `config`; sender builds the onion)
+* Distributed identity validation (Trustee + ME signatures)
+* **Hybrid onion (RSA-OAEP + Fernet)** and **per-link session encryption (X25519 + HKDF + AES-GCM)** for a given **ACI**
+* Stateful connection management (per-circuit keys on each node)
 * Multi-hop communication model
 
 ---
 
 # 🚧 Remaining Phases
-
-## 🔐 Phase 3 – Onion Layered Encryption
-
-* Add multi-layer encryption
-* Each router decrypts one layer
-
-## 🔑 Phase 4 – Session Keys
-
-* Per-hop encryption
-* Secure payload forwarding
 
 ## 🔄 Phase 5 – Reverse Trace Mechanism
 
@@ -343,9 +405,16 @@ This project demonstrates:
 * Cryptographic identity validation
 * Circuit-based anonymous communication
 * Reverse traceable anonymity
+* Layered cryptography (hybrid onion + ECDH-derived link keys)
+
+---
 
 # 🏁 Current Status
 
-✔ Phase 1 Completed
-✔ Phase 2A Completed
-✔ Phase 2B Completed
+✔ Phase 1 Completed — Identity & validation (Trustee, ME signatures, MongoDB)
+✔ Phase 2A Completed — Multi-hop REST routing
+✔ Phase 2B Completed — ACI + `/init` + routing table
+✔ Phase 3 Completed — Hybrid onion (RSA-OAEP + AES-256 Fernet per hop)
+✔ Phase 4 Completed — X25519 ECDH at `/init`, HKDF (ACI-bound), AES-GCM link forwarding
+
+---

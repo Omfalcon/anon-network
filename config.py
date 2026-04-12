@@ -12,3 +12,11 @@ ROUTING_TABLE = {
     "Y": "http://127.0.0.1:6003/forward",
     "RECEIVER": "http://127.0.0.1:7000/receive"
 }
+
+# Base URLs for Phase 4 ECDH /session/* (no path suffix)
+NODE_BASES = {
+    "routerS": "http://127.0.0.1:6001",
+    "routerX": "http://127.0.0.1:6002",
+    "routerY": "http://127.0.0.1:6003",
+    "receiverB": "http://127.0.0.1:7000",
+}

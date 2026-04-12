@@ -8,7 +8,7 @@ fuser -k 5000/tcp 5001/tcp 5002/tcp 6001/tcp 6002/tcp 6003/tcp 6004/tcp 7000/tcp
 export PYTHONPATH=.
 
 # 3. Provisioning: Generate the Keyring
-echo "Generating fresh RSA Keyring for Phase 3..."
+echo "Generating fresh RSA Keyring (onion layers + nodes)..."
 python generate_keyring.py
 
 if [ $? -ne 0 ]; then
@@ -16,7 +16,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo "Starting Anon-Network Phase 3 Nodes..."
+echo "Starting Anon-Network nodes (Phase 4: ECDH + link AES-GCM at routers)..."
 
 # 4. Start the Trustee (Identity Mapping)
 PORT=5000 python trustee/app.py & 
