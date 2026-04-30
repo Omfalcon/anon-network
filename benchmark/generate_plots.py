@@ -44,6 +44,42 @@ def generate_plots():
         plt.savefig('benchmark/crypto_performance.png')
         print("[Success] Saved benchmark/crypto_performance.png")
 
+    # --- Plot 3: Per-Hop Latency ---
+    per_hop_df = df[df['phase'] == 'Per-Hop']
+    if not per_hop_df.empty:
+        # Extract hop numbers for x-axis
+        # 'operation' is formatted as "Hop 1", "Hop 2", etc.
+        hops = [int(op.split()[1]) for op in per_hop_df['operation']]
+        latencies = per_hop_df['time_ms']
+        
+        plt.figure(figsize=(10, 6))
+        
+        # Clean, modern styling
+        plt.plot(hops, latencies, marker='o', markersize=8, linewidth=3, color='#e74c3c', 
+                 markerfacecolor='white', markeredgewidth=2, label='Total Latency')
+        
+        # Fill under the line for a polished look
+        plt.fill_between(hops, latencies, color='#e74c3c', alpha=0.1)
+        
+        plt.xlabel('Number of Hops', fontsize=12, fontweight='bold')
+        plt.ylabel('Latency (ms)', fontsize=12, fontweight='bold')
+        plt.title('Anon-Network: Latency vs. Path Length', fontsize=14, pad=15)
+        
+        # Make the grid lighter
+        plt.grid(axis='both', linestyle='--', alpha=0.5, color='#bdc3c7')
+        
+        # Set integer ticks for hops
+        plt.xticks(hops)
+        
+        # Remove top and right spines for a cleaner look
+        ax = plt.gca()
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        
+        plt.tight_layout()
+        plt.savefig('benchmark/per_hop_latency.png', dpi=300, bbox_inches='tight')
+        print("[Success] Saved benchmark/per_hop_latency.png")
+
 if __name__ == "__main__":
     # Use a non-interactive backend for server-side generation if needed
     plt.switch_backend('Agg') 
